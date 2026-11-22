@@ -88,10 +88,14 @@ struct PatchProjectsView: View {
 
     init(
         onOpenSettings: @escaping () -> Void = {},
-        onOpenLogs: @escaping () -> Void = {}
+        onOpenLogs: @escaping () -> Void = {},
+        namespace: PatchLibraryNamespace = .primary,
+        navigationTitleOverride: String? = nil
     ) {
         self.onOpenSettings = onOpenSettings
         self.onOpenLogs = onOpenLogs
+        self.namespace = namespace
+        self.navigationTitleOverride = navigationTitleOverride
 #if targetEnvironment(simulator)
         _showCreate = State(
             initialValue: ProcessInfo.processInfo.arguments.contains("--simulate-patch-editor")
