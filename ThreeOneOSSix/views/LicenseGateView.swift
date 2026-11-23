@@ -6,6 +6,7 @@ enum LicenseStore {
     private static let key = "argent.license.validated"
     private static let lastCheckKey = "argent.license.lastCheck"
     private static let keychainAccount = "argent.license.key"
+    private static let maxSeenKey = "argent.license.maxSeen"
     /// Sin conexión se deja usar la app hasta este tiempo desde la última
     /// verificación correcta; pasado eso se vuelve a pedir internet.
     static let offlineGrace: TimeInterval = 72 * 3600
@@ -38,13 +39,22 @@ enum LicenseStore {
     }
 
     static func markChecked() {
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastCheckKey)
+        let now = Date().timeIntervalSince1970
+        UserDefaults.standard.set(now, forKey: lastCheckKey)
+        UserDefaults.standard.set(max(now, UserDefaults.standard.double(forKey: maxSeenKey)), forKey: maxSeenKey)
     }
 
+    /// Sin internet: ¿ya se acabó el margen? También cuenta como vencido si el
+    /// reloj del teléfono se movió hacia atrás (para estirar el margen).
     static var offlineGraceExpired: Bool {
-        let last = UserDefaults.standard.double(forKey: lastCheckKey)
+        let now = Date().timeIntervalSince1970
+        let defaults = UserDefaults.standard
+        let maxSeen = defaults.double(forKey: maxSeenKey)
+        let clockWentBack = maxSeen > 0 && now < maxSeen - 300
+        defaults.set(max(now, maxSeen), forKey: maxSeenKey)
+        let last = defaults.double(forKey: lastCheckKey)
         guard last > 0 else { return true }
-        return Date().timeIntervalSince1970 - last > offlineGrace
+        return clockWentBack || now - last > offlineGrace
     }
 
     /// Quita el desbloqueo y la licencia guardada (venció, la pausaron, etc.).
