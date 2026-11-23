@@ -1,0 +1,219 @@
+name: Web build (panel)
+
+# Workflow EXCLUSIVO del panel web: solo se lanza a mano (workflow_dispatch)
+# desde el panel, así no se mezcla con "Build unsigned IPA" ni se dispara con
+# los push. El resto del archivo es el mismo proceso de compilación.
+run-name: Build ${{ inputs.app_name || 'FoxRank' }} (${{ inputs.requested_by || github.actor }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Nombre de la app (lo manda el panel web)"
+        required: false
+        default: ""
+      accent_color:
+        description: "Color de acento, hex (ej. #3CD616)"
+        required: false
+        default: ""
+      discord_link:
+        description: "Invite de Discord"
+        required: false
+        default: ""
+      icon_path:
+        description: "Ruta del icono (WebBuilds/incoming/...)"
+        required: false
+        default: ""
+      logo_path:
+        description: "Ruta del logo (WebBuilds/incoming/...)"
+        required: false
+        default: ""
+      assets_ref:
+        description: "Rama donde el panel subió icono/logo (vacío = la misma del código)"
+        required: false
+        default: ""
+      requested_by:
+        description: "Quién lo pidió desde el panel"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # macos-15 trae Xcode 16.4 (SDK hasta iphoneos18.5) — eso compila la app
+    # contra un SDK viejo aunque corra en dispositivos con iOS 27. El runner
+    # xcode-27 (solo Apple Silicon/arm64) trae Xcode 27 con el SDK iphoneos27.1,
+    # que es contra lo que realmente queremos enlazar para dispositivos en
+    # iOS 27.x. Si este runner no está disponible en tu cuenta/organización,
+    # cambia esta línea de vuelta a macos-15 (el build sigue funcionando,
+    # solo que enlazado contra el SDK viejo).
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar icono/logo del panel (rama de assets)
+        if: ${{ inputs.assets_ref != '' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.assets_ref }}
+          path: _assets
+
+      - name: Aplicar personalización del panel web
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          ACCENT_COLOR: ${{ inputs.accent_color }}
+          DISCORD_LINK: ${{ inputs.discord_link }}
+          ICON_PATH: ${{ inputs.icon_path }}
+          LOGO_PATH: ${{ inputs.logo_path }}
+          ASSETS_DIR: ${{ inputs.assets_ref != '' && '_assets' || '' }}
+        run: |
+          python3 - <<'PY'
+          #!/usr/bin/env python3
+          """Aplica la personalización que pide el panel web (nombre, color, Discord,
+          icono y logo) sobre el código ANTES de compilar. Lee todo de variables de
+          entorno (nunca se interpola en el shell, para evitar inyección)."""
+          import os, re, shutil, sys
+
+          app_name = os.environ.get("APP_NAME", "").strip()
+          accent = os.environ.get("ACCENT_COLOR", "").strip()
+          discord = os.environ.get("DISCORD_LINK", "").strip()
+          icon_path = os.environ.get("ICON_PATH", "").strip()
+          logo_path = os.environ.get("LOGO_PATH", "").strip()
+          # Carpeta donde está el checkout de la rama de assets ("." = la misma del código)
+          assets_dir = os.environ.get("ASSETS_DIR", "").strip() or "."
+
+          PLIST = "ThreeOneOSSix/Info.plist"
+          PBXPROJ = "ThreeOneOSSix.xcodeproj/project.pbxproj"
+          THEME = "ThreeOneOSSix/views/DesignSystem.swift"
+          GATE = "ThreeOneOSSix/views/LicenseGateView.swift"
+          ICON_DST = "ThreeOneOSSix/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
+          LOGO_DST = "ThreeOneOSSix/Assets.xcassets/FoxRankLogo.imageset/FoxRankLogo.png"
+
+
+          def read(p):
+              with open(p, encoding="utf-8") as f:
+                  return f.read()
+
+
+          def write(p, s):
+              with open(p, "w", encoding="utf-8") as f:
+                  f.write(s)
+
+
+          def sub_once(path, pattern, repl, label):
+              text = read(path)
+              new, n = re.subn(pattern, lambda m: repl, text, count=1)
+              if n != 1:
+                  sys.exit(f"ERROR: no pude aplicar '{label}' en {path} (¿cambió el código?)")
+              write(path, new)
+              print(f"OK {label}")
+
+
+          if app_name:
+              if len(app_name) > 40 or re.search(r"[\x00-\x1f]", app_name):
+                  sys.exit("ERROR: app_name inválido (máx. 40 caracteres, sin saltos de línea)")
+              xml = app_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+              # Solo cambia el nombre que se ve bajo el icono; PRODUCT_NAME NO se toca
+              # (el paso de empaquetado busca FoxRank.app).
+              text = read(PLIST)
+              text, n = re.subn(r"(<key>CFBundleDisplayName</key>\s*<string>)[^<]*(</string>)",
+                                lambda m: m.group(1) + xml + m.group(2), text, count=1)
+              if n != 1:
+                  sys.exit("ERROR: no encontré CFBundleDisplayName en Info.plist")
+              write(PLIST, text)
+              pb = read(PBXPROJ)
+              esc = app_name.replace("\\", "\\\\").replace('"', '\\"')
+              pb, n = re.subn(r"INFOPLIST_KEY_CFBundleDisplayName = [^;]*;",
+                              lambda m: f'INFOPLIST_KEY_CFBundleDisplayName = "{esc}";', pb)
+              if n < 1:
+                  sys.exit("ERROR: no encontré INFOPLIST_KEY_CFBundleDisplayName en el proyecto")
+              write(PBXPROJ, pb)
+              print(f"OK nombre = {app_name}")
+
+          if accent:
+              m = re.fullmatch(r"#?([0-9a-fA-F]{6})", accent)
+              if not m:
+                  sys.exit("ERROR: accent_color debe ser un hex de 6 dígitos")
+              h = m.group(1)
+              r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+              line = f"static let accent = Color(uiColor: UIColor(red: {r:.3f}, green: {g:.3f}, blue: {b:.3f}, alpha: 1.00))"
+              sub_once(THEME, r"static let accent = Color\(uiColor: UIColor\([^\n]*\)\)", line, f"color #{h.upper()}")
+
+          if discord:
+              if not re.fullmatch(r"https://(www\.)?discord\.gg/[A-Za-z0-9_-]+|https://discord\.com/invite/[A-Za-z0-9_-]+", discord):
+                  sys.exit("ERROR: discord_link no es un invite válido")
+              sub_once(GATE, r"https://discord\.gg/[A-Za-z0-9_-]+", discord, "discord")
+
+          for src, dst, label in ((icon_path, ICON_DST, "icono"), (logo_path, LOGO_DST, "logo")):
+              if src:
+                  # Solo se aceptan archivos que subió el panel a WebBuilds/incoming/
+                  norm = os.path.normpath(src)
+                  if not norm.startswith("WebBuilds" + os.sep + "incoming" + os.sep) or ".." in norm.split(os.sep):
+                      sys.exit(f"ERROR: ruta de {label} no permitida: {src}")
+                  full = os.path.join(assets_dir, norm)
+                  if not os.path.isfile(full):
+                      sys.exit(f"ERROR: no existe el archivo de {label}: {src}")
+                  shutil.copyfile(full, dst)
+                  print(f"OK {label} <- {norm}")
+          PY
+
+      - name: Show Xcode and scheme
+        run: |
+          xcodebuild -version
+          xcodebuild -list -project ThreeOneOSSix.xcodeproj
+
+      - name: Fix script permissions
+        run: chmod +x Tests/*.sh scripts/*.sh
+
+      - name: Policy tests
+        run: bash Tests/run_policy_tests.sh
+
+      - name: Build
+        run: |
+          xcodebuild -project ThreeOneOSSix.xcodeproj -scheme FoxRank \
+            -configuration Release -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/FoxRank.app"
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry "FoxRank-${VERSION}-unsigned.ipa" Payload
+          shasum -a 256 "FoxRank-${VERSION}-unsigned.ipa"
+          echo "IPA=FoxRank-${VERSION}-unsigned.ipa" >> "$GITHUB_ENV"
+          echo "IPA_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "IPA_BUILD=${BUILD}" >> "$GITHUB_ENV"
+
+      # Release-gate sentinel (issue #3): derive a >=16 byte string literal
+      # from the current source instead of maintaining a hardcoded constant.
+      # Swift -O inlines shorter interpolation fragments, so short probes are
+      # not reliable. Asserts the artifact was built from this source tree.
+      - name: Verify artifact matches source
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/FoxRank.app"
+          SENTINEL=$(grep -rhoE '"[A-Za-z0-9_./=-]{16,}"' ThreeOneOSSix --include='*.swift' \
+            | head -1 | tr -d '"')
+          if [[ -z "$SENTINEL" ]]; then
+            echo "FAIL: no >=16 byte source sentinel found" >&2
+            exit 1
+          fi
+          COUNT=$(strings "$APP/FoxRank" | grep -cF "$SENTINEL" || true)
+          if [[ "$COUNT" -lt 1 ]]; then
+            echo "FAIL: release artifact missing source sentinel '$SENTINEL'" >&2
+            echo "The packaged binary does not match the current source tree." >&2
+            exit 1
+          fi
+          echo "artifact sentinel OK (sentinel=$SENTINEL count=$COUNT)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-${{ github.run_id }}
+          path: "FoxRank-*-unsigned.ipa"
