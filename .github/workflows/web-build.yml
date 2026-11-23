@@ -32,6 +32,10 @@ on:
         description: "Rama donde el panel subió icono/logo (vacío = la misma del código)"
         required: false
         default: ""
+      patches:
+        description: "Categorías a incluir (nombres separados por |; vacío = todas; __none__ = ninguna)"
+        required: false
+        default: ""
       requested_by:
         description: "Quién lo pidió desde el panel"
         required: false
@@ -68,6 +72,7 @@ jobs:
           ICON_PATH: ${{ inputs.icon_path }}
           LOGO_PATH: ${{ inputs.logo_path }}
           ASSETS_DIR: ${{ inputs.assets_ref != '' && '_assets' || '' }}
+          PATCHES: ${{ inputs.patches }}
         run: |
           python3 - <<'PY'
           #!/usr/bin/env python3
@@ -151,6 +156,22 @@ jobs:
                   sub_once(GATE, r"https://discord\.gg/[A-Za-z0-9_-]+", discord, "discord")
               else:
                   sys.exit("ERROR: el enlace de contacto no es un invite de Discord ni un wa.me válido")
+
+          # Categorías: deja en BundledPatches/ solo los archivos elegidos en el panel
+          # (se comparan por nombre, sin la extensión). Vacío = no se toca nada.
+          patches_raw = os.environ.get("PATCHES", "").strip()
+          if patches_raw:
+              folder = "BundledPatches"
+              wanted = set() if patches_raw == "__none__" else {n for n in patches_raw.split("|") if n}
+              files = [f for f in os.listdir(folder) if not f.startswith(".") and os.path.isfile(os.path.join(folder, f))]
+              stems = {os.path.splitext(f)[0] for f in files}
+              missing = wanted - stems
+              if missing:
+                  sys.exit(f"ERROR: categorías que no existen en BundledPatches: {sorted(missing)}")
+              for f in files:
+                  if os.path.splitext(f)[0] not in wanted:
+                      os.remove(os.path.join(folder, f))
+              print(f"OK categorías = {sorted(wanted) if wanted else 'ninguna'}")
 
           for src, dst, label in ((icon_path, ICON_DST, "icono"), (logo_path, LOGO_DST, "logo")):
               if src:
