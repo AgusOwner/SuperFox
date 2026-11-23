@@ -142,9 +142,15 @@ jobs:
               sub_once(THEME, r"static let accent = Color\(uiColor: UIColor\([^\n]*\)\)", line, f"color #{h.upper()}")
 
           if discord:
-              if not re.fullmatch(r"https://(www\.)?discord\.gg/[A-Za-z0-9_-]+|https://discord\.com/invite/[A-Za-z0-9_-]+", discord):
-                  sys.exit("ERROR: discord_link no es un invite válido")
-              sub_once(GATE, r"https://discord\.gg/[A-Za-z0-9_-]+", discord, "discord")
+              # El mismo campo sirve para Discord o para WhatsApp (https://wa.me/<número>)
+              if re.fullmatch(r"https://wa\.me/[0-9]{8,15}", discord):
+                  sub_once(GATE, r"https://discord\.gg/[A-Za-z0-9_-]+", discord, "enlace de WhatsApp")
+                  sub_once(GATE, r'Text\("DISCORD"\)', 'Text("WHATSAPP")', "texto del botón")
+                  sub_once(GATE, r'Image\(systemName: "bubble\.left\.and\.bubble\.right\.fill"\)', 'Image(systemName: "phone.fill")', "icono del botón")
+              elif re.fullmatch(r"https://(www\.)?discord\.gg/[A-Za-z0-9_-]+|https://discord\.com/invite/[A-Za-z0-9_-]+", discord):
+                  sub_once(GATE, r"https://discord\.gg/[A-Za-z0-9_-]+", discord, "discord")
+              else:
+                  sys.exit("ERROR: el enlace de contacto no es un invite de Discord ni un wa.me válido")
 
           for src, dst, label in ((icon_path, ICON_DST, "icono"), (logo_path, LOGO_DST, "logo")):
               if src:
