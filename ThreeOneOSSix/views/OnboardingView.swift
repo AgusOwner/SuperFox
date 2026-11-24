@@ -85,7 +85,7 @@ struct OnboardingView: View {
                 .font(.title2.weight(.bold))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(language.text("onboarding.versions_subtitle"))
+            Text(language.text("onboarding.versions_subtitle").replacingOccurrences(of: "FoxRank", with: AppBranding.name))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -96,7 +96,7 @@ struct OnboardingView: View {
     private var statusBadge: some View {
         HStack(spacing: 10) {
             Image(systemName: supported ? "checkmark.seal.fill" : "xmark.octagon.fill")
-                .foregroundStyle(supported ? Color.green : Color.red)
+                .foregroundStyle(supported ? AppTheme.accent : Color.red)
                 .font(.title3)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
@@ -111,7 +111,7 @@ struct OnboardingView: View {
         }
         .padding(14)
         .background(
-            (supported ? Color.green : Color.red).opacity(0.10),
+            (supported ? AppTheme.accent : Color.red).opacity(0.10),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
         .accessibilityElement(children: .combine)
@@ -136,25 +136,25 @@ struct OnboardingView: View {
                 icon: "checkmark.circle.fill",
                 title: "iOS 17",
                 value: ExploitSupportPolicy.verifiedIOS17Range,
-                color: .green
+                color: AppTheme.accent
             )
             versionRow(
                 icon: "checkmark.circle.fill",
                 title: "iOS 18",
                 value: ExploitSupportPolicy.verifiedIOS18Range,
-                color: .green
+                color: AppTheme.accent
             )
             versionRow(
                 icon: "checkmark.circle.fill",
                 title: "iOS 26",
                 value: "\(ExploitSupportPolicy.verifiedIOS26BadQueryRange) · \(ExploitSupportPolicy.verifiedIOS26WorseQueryRange)",
-                color: .green
+                color: AppTheme.accent
             )
             versionRow(
                 icon: "checkmark.circle.fill",
                 title: "iOS 27",
                 value: ExploitSupportPolicy.verifiedIOS27Range,
-                color: .green
+                color: AppTheme.accent
             )
             // 27.3 stays a separate row because its boundary is a build number,
             // not a version number. Folding it into the row above would read as
@@ -164,7 +164,7 @@ struct OnboardingView: View {
                 icon: "checkmark.circle.fill",
                 title: "iOS 27.3",
                 value: "\(ExploitSupportPolicy.verifiedIOS27BuildGatedRange) · \(ExploitSupportPolicy.verifiedIOS27Builds.joined(separator: ", "))",
-                color: .green
+                color: AppTheme.accent
             )
         }
     }
