@@ -94,7 +94,7 @@ struct LicenseGateView: View {
                     .scaledToFit()
                     .frame(width: 180, height: 180)
 
-                Text("FOXRANK")
+                Text(AppBranding.name.uppercased())
                     .font(.system(size: 28, weight: .heavy, design: .default))
                     .foregroundStyle(.white)
                     .tracking(4)
