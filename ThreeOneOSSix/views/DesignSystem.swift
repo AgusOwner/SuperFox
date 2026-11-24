@@ -94,6 +94,14 @@ struct AppSearchField: View {
     }
 }
 
+/// Nombre de la app tal como lo puso el panel web (CFBundleDisplayName).
+enum AppBranding {
+    static var name: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "FoxRank"
+    }
+}
+
 struct AppLogo: View {
     var size: CGFloat = 44
 
