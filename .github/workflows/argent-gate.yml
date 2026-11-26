@@ -1,0 +1,30 @@
+name: Build ArgentGate dylib
+on:
+  push:
+    branches: [argent-gate]
+    paths: ['ArgentGate/**', '.github/workflows/argent-gate.yml']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile
+        run: |
+          mkdir out
+          clang -arch arm64 -dynamiclib -fobjc-arc -O2 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -miphoneos-version-min=15.0 \
+            -framework UIKit -framework Foundation \
+            -install_name @rpath/ArgentGate.dylib \
+            ArgentGate/ArgentGate.m -o out/ArgentGate.dylib
+          file out/ArgentGate.dylib; otool -L out/ArgentGate.dylib
+      - name: Publicar en rama argent-gate-out
+        run: |
+          git config user.name "gate-bot"; git config user.email "gate-bot@users.noreply.github.com"
+          git checkout --orphan argent-gate-out
+          git rm -rf . >/dev/null 2>&1 || true
+          cp out/ArgentGate.dylib .
+          git add ArgentGate.dylib
+          git commit -m "ArgentGate.dylib"
+          git push -f origin argent-gate-out
