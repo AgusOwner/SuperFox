@@ -56,6 +56,22 @@ static UIColor *AccentColor(void) {
     return [UIColor colorWithRed:0.86 green:0.1 blue:0.12 alpha:1];
 }
 
+// Botón de contacto opcional (Discord o WhatsApp). El panel guarda en el
+// Info.plist "ArgentContactType" ("discord"/"whatsapp") y "ArgentContactURL"
+// (enlace https). Si no viene la URL, no se muestra ningún botón.
+static NSString *gContactURL;
+
+static NSString *ContactURL(void) {
+    id u = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ArgentContactURL"];
+    if ([u isKindOfClass:NSString.class] && [(NSString *)u hasPrefix:@"https://"]) return u;
+    return nil;
+}
+
+static NSString *ContactTitle(void) {
+    id t = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ArgentContactType"];
+    return [t isKindOfClass:NSString.class] && [(NSString *)t isEqualToString:@"whatsapp"] ? @"WHATSAPP" : @"DISCORD";
+}
+
 static NSString *Enc(NSString *s) {
     NSMutableCharacterSet *cs = [NSCharacterSet alphanumericCharacterSet].mutableCopy;
     [cs addCharactersInString:@"-._~"];
@@ -109,6 +125,7 @@ static void Check(NSString *key, BOOL retry, void (^done)(int res, NSString *msg
 @interface AGHandler : NSObject
 + (void)submit;
 + (void)recheck;
++ (void)contact;
 @end
 
 static void HideGate(void) { gGate.hidden = YES; gGate = nil; gValid = YES; }
@@ -152,6 +169,21 @@ static void ShowGate(NSString *note) {
     // Logo arriba del nombre: el panel mete "ArgentGateLogo.png" dentro de la
     // IPA cuando se sube un logo. Si no está, el gate queda sin logo como antes.
     NSMutableArray *rows = [NSMutableArray arrayWithObjects:t, gField, gBtn, gMsg, nil];
+    gContactURL = ContactURL();
+    if (gContactURL) {
+        UIColor *accent = AccentColor();
+        UIButton *cb = [UIButton buttonWithType:UIButtonTypeSystem];
+        [cb setTitle:ContactTitle() forState:UIControlStateNormal];
+        [cb setTitleColor:accent forState:UIControlStateNormal];
+        cb.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightHeavy];
+        cb.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1];
+        cb.layer.cornerRadius = 12;
+        cb.layer.borderWidth = 1;
+        cb.layer.borderColor = [accent colorWithAlphaComponent:0.5].CGColor;
+        [cb.heightAnchor constraintEqualToConstant:50].active = YES;
+        [cb addTarget:AGHandler.class action:@selector(contact) forControlEvents:UIControlEventTouchUpInside];
+        [rows insertObject:cb atIndex:3]; // debajo de "Activar", antes del mensaje
+    }
     NSString *logoPath = [NSBundle.mainBundle pathForResource:@"ArgentGateLogo" ofType:@"png"];
     UIImage *logo = logoPath ? [UIImage imageWithContentsOfFile:logoPath] : nil;
     if (logo) {
@@ -178,6 +210,10 @@ static void ShowGate(NSString *note) {
 }
 
 @implementation AGHandler
++ (void)contact {
+    NSURL *u = gContactURL ? [NSURL URLWithString:gContactURL] : nil;
+    if (u) [UIApplication.sharedApplication openURL:u options:@{} completionHandler:nil];
+}
 + (void)submit {
     NSString *k = [gField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (!k.length) { gMsg.text = @"Escribe tu licencia."; return; }
