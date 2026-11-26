@@ -149,8 +149,20 @@ static void ShowGate(NSString *note) {
     gMsg.text = note; gMsg.textColor = [UIColor colorWithWhite:0.7 alpha:1];
     gMsg.font = [UIFont systemFontOfSize:13]; gMsg.numberOfLines = 0;
     gMsg.textAlignment = NSTextAlignmentCenter;
-    UIStackView *st = [[UIStackView alloc] initWithArrangedSubviews:@[t, gField, gBtn, gMsg]];
+    // Logo arriba del nombre: el panel mete "ArgentGateLogo.png" dentro de la
+    // IPA cuando se sube un logo. Si no está, el gate queda sin logo como antes.
+    NSMutableArray *rows = [NSMutableArray arrayWithObjects:t, gField, gBtn, gMsg, nil];
+    NSString *logoPath = [NSBundle.mainBundle pathForResource:@"ArgentGateLogo" ofType:@"png"];
+    UIImage *logo = logoPath ? [UIImage imageWithContentsOfFile:logoPath] : nil;
+    if (logo) {
+        UIImageView *iv = [[UIImageView alloc] initWithImage:logo];
+        iv.contentMode = UIViewContentModeScaleAspectFit;
+        [iv.heightAnchor constraintEqualToConstant:110].active = YES;
+        [rows insertObject:iv atIndex:0];
+    }
+    UIStackView *st = [[UIStackView alloc] initWithArrangedSubviews:rows];
     st.axis = UILayoutConstraintAxisVertical; st.spacing = 16;
+    if (logo) [st setCustomSpacing:22 afterView:rows[0]];
     st.translatesAutoresizingMaskIntoConstraints = NO;
     [vc.view addSubview:st];
     [NSLayoutConstraint activateConstraints:@[
