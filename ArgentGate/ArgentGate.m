@@ -24,6 +24,38 @@ static NSString *HWID(void) {
     return h;
 }
 
+// Nombre que se ve bajo el icono (lo que haya puesto el panel al editar la
+// IPA). Si por lo que sea no está, cae a "App" en vez de un nombre fijo.
+static NSString *AppDisplayName(void) {
+    NSString *n = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
+    if (![n isKindOfClass:NSString.class] || !n.length) {
+        n = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"];
+    }
+    return (([n isKindOfClass:NSString.class] && n.length) ? n : @"App").uppercaseString;
+}
+
+// Color de acento para este gate: lo pone el panel al generar la IPA, guardado
+// en una clave propia del Info.plist ("ArgentAccentColor", hex "#RRGGBB").
+// Si no vino (o es inválido), se usa el rojo de siempre.
+static UIColor *AccentColor(void) {
+    id hex = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ArgentAccentColor"];
+    if ([hex isKindOfClass:NSString.class]) {
+        NSString *h = [(NSString *)hex stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if ([h hasPrefix:@"#"]) h = [h substringFromIndex:1];
+        if (h.length == 6) {
+            unsigned int v = 0;
+            NSScanner *sc = [NSScanner scannerWithString:h];
+            if ([sc scanHexInt:&v] && sc.isAtEnd) {
+                return [UIColor colorWithRed:((v >> 16) & 0xFF) / 255.0
+                                        green:((v >> 8) & 0xFF) / 255.0
+                                         blue:(v & 0xFF) / 255.0
+                                        alpha:1.0];
+            }
+        }
+    }
+    return [UIColor colorWithRed:0.86 green:0.1 blue:0.12 alpha:1];
+}
+
 static NSString *Enc(NSString *s) {
     NSMutableCharacterSet *cs = [NSCharacterSet alphanumericCharacterSet].mutableCopy;
     [cs addCharactersInString:@"-._~"];
@@ -92,7 +124,7 @@ static void ShowGate(NSString *note) {
     UIViewController *vc = [UIViewController new];
     vc.view.backgroundColor = [UIColor colorWithWhite:0.04 alpha:1];
     UILabel *t = [UILabel new];
-    t.text = @"ARGENT"; t.textColor = UIColor.whiteColor;
+    t.text = AppDisplayName(); t.textColor = UIColor.whiteColor;
     t.font = [UIFont systemFontOfSize:30 weight:UIFontWeightBlack];
     t.textAlignment = NSTextAlignmentCenter;
     gField = [UITextField new];
@@ -110,7 +142,7 @@ static void ShowGate(NSString *note) {
     [gBtn setTitle:@"Activar" forState:UIControlStateNormal];
     [gBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     gBtn.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
-    gBtn.backgroundColor = [UIColor colorWithRed:0.86 green:0.1 blue:0.12 alpha:1];
+    gBtn.backgroundColor = AccentColor();
     gBtn.layer.cornerRadius = 12;
     [gBtn addTarget:AGHandler.class action:@selector(submit) forControlEvents:UIControlEventTouchUpInside];
     gMsg = [UILabel new];
